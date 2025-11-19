@@ -108,6 +108,17 @@ public class ServerControl implements ApplicationListener{
     }
 
     protected void setup(String[] args){
+
+        // 0) unaffiliated  commands
+
+        customMapDirectory.mkdirs();
+
+        if(Version.build == -1){
+            warn("&lyYour server is running a custom build, which means that client checking is disabled.");
+            warn("&lyIt is highly advised to specify which version you're using by building with gradle args &lb&fb-Pbuildversion=&lr<build>");
+        }
+
+        // 1) Set up core settings
         Core.settings.defaults(
             "bans", "",
             "admins", "",
@@ -115,43 +126,11 @@ public class ServerControl implements ApplicationListener{
             "globalrules", "{reactorExplosions: false, logicUnitBuild: false}"
         );
 
-        //update log level
-        Config.debug.set(Config.debug.bool());
-
         try{
             lastMode = Gamemode.valueOf(Core.settings.getString("lastServerMode", "survival"));
         }catch(Exception e){ //handle enum parse exception
             lastMode = Gamemode.survival;
         }
-
-        logger = (level1, text) -> {
-            //err has red text instead of reset.
-            if(level1 == LogLevel.err) text = text.replace(reset, lightRed + bold);
-
-            String result = bold + lightBlack + "[" + dateTime.format(LocalDateTime.now()) + "] " + reset + format(tags[level1.ordinal()] + " " + text + "&fr");
-            System.out.println(result);
-
-            if(Config.logging.bool()){
-                logToFile("[" + dateTime.format(LocalDateTime.now()) + "] " + formatColors(tags[level1.ordinal()] + " " + text + "&fr", false));
-            }
-
-            if(socketOutput != null){
-                try{
-                    socketOutput.println(formatColors(text + "&fr", false));
-                }catch(Throwable e1){
-                    err("Error occurred logging to socket: @", e1.getClass().getSimpleName());
-                }
-            }
-        };
-
-        formatter = (text, useColors, arg) -> {
-            text = Strings.format(text.replace("@", "&fb&lb@&fr"), arg);
-            return useColors ? addColors(text) : removeColors(text);
-        };
-
-        Time.setDeltaProvider(() -> Math.min(Core.graphics.getDeltaTime() * 60f, maxDeltaServer));
-
-        registerCommands();
 
         Core.app.post(() -> {
             //try to load auto-update save if possible
@@ -191,12 +170,40 @@ public class ServerControl implements ApplicationListener{
             }
         });
 
-        customMapDirectory.mkdirs();
+        // 2) Set up the logging system
 
-        if(Version.build == -1){
-            warn("&lyYour server is running a custom build, which means that client checking is disabled.");
-            warn("&lyIt is highly advised to specify which version you're using by building with gradle args &lb&fb-Pbuildversion=&lr<build>");
-        }
+        //update log level
+        Config.debug.set(Config.debug.bool());
+
+        logger = (level1, text) -> {
+            //err has red text instead of reset.
+            if(level1 == LogLevel.err) text = text.replace(reset, lightRed + bold);
+
+            String result = bold + lightBlack + "[" + dateTime.format(LocalDateTime.now()) + "] " + reset + format(tags[level1.ordinal()] + " " + text + "&fr");
+            System.out.println(result);
+
+            if(Config.logging.bool()){
+                logToFile("[" + dateTime.format(LocalDateTime.now()) + "] " + formatColors(tags[level1.ordinal()] + " " + text + "&fr", false));
+            }
+
+            if(socketOutput != null){
+                try{
+                    socketOutput.println(formatColors(text + "&fr", false));
+                }catch(Throwable e1){
+                    err("Error occurred logging to socket: @", e1.getClass().getSimpleName());
+                }
+            }
+        };
+
+        formatter = (text, useColors, arg) -> {
+            text = Strings.format(text.replace("@", "&fb&lb@&fr"), arg);
+            return useColors ? addColors(text) : removeColors(text);
+        };
+
+        Time.setDeltaProvider(() -> Math.min(Core.graphics.getDeltaTime() * 60f, maxDeltaServer));
+
+
+        // 3) Set up the game map
 
         //set up default shuffle mode
         try{
@@ -205,20 +212,40 @@ public class ServerControl implements ApplicationListener{
             maps.setShuffleMode(ShuffleMode.all);
         }
 
+        // 4) Set up the game flow
+
         Events.on(GameOverEvent.class, event -> {
             if(!inGameOverWait && gameOverListener != null){
                 gameOverListener.get(event);
             }
         });
 
+        registerCommands();
+
+        Events.on(ServerLoadEvent.class, e -> {
+            if(serverInput != null){
+                Thread thread = new Thread(serverInput, "Server Controls");
+                thread.setDaemon(true);
+                thread.start();
+            }
+
+            info("Server loaded. Type @ for help.", "'help'");
+        });
+
+        Events.on(PlayEvent.class, e -> {
+            try{
+                JsonValue value = JsonIO.json.fromJson(null, Core.settings.getString("globalrules"));
+                JsonIO.json.readFields(state.rules, value);
+            }catch(Throwable t){
+                err("Error applying custom rules, proceeding without them.", t);
+            }
+        });
+
+        // 5) Set up game saving
+
         //reset autosave on world load
         Events.on(WorldLoadEvent.class, e -> {
             autosaveCount.reset(0, Config.autosaveSpacing.num() * 60);
-        });
-
-        Events.run(Trigger.socketConfigChanged, () -> {
-            toggleSocket(false);
-            toggleSocket(Config.socketInput.bool());
         });
 
         Events.on(SaveLoadEvent.class, e -> {
@@ -230,6 +257,16 @@ public class ServerControl implements ApplicationListener{
             });
         });
 
+        //autosave settings once a minute
+        float saveInterval = 60;
+        Timer.schedule(() -> {
+            netServer.admins.forceSave();
+            Core.settings.forceSave();
+        }, saveInterval, saveInterval);
+
+
+
+        // 6) Set up game moderation
         Events.on(PlayerJoin.class, e -> {
             if(state.isPaused() && autoPaused && Config.autoPause.bool()){
                 state.set(State.playing);
@@ -246,22 +283,6 @@ public class ServerControl implements ApplicationListener{
             }
         });
 
-        Events.on(PlayEvent.class, e -> {
-            try{
-                JsonValue value = JsonIO.json.fromJson(null, Core.settings.getString("globalrules"));
-                JsonIO.json.readFields(state.rules, value);
-            }catch(Throwable t){
-                err("Error applying custom rules, proceeding without them.", t);
-            }
-        });
-
-        //autosave settings once a minute
-        float saveInterval = 60;
-        Timer.schedule(() -> {
-            netServer.admins.forceSave();
-            Core.settings.forceSave();
-        }, saveInterval, saveInterval);
-
         if(!mods.orderedMods().isEmpty()){
             info("@ mods loaded.", mods.orderedMods().size);
         }
@@ -275,17 +296,16 @@ public class ServerControl implements ApplicationListener{
             }
         }
 
+        // 7) Setup socket
+
+        Events.run(Trigger.socketConfigChanged, () -> {
+            toggleSocket(false);
+            toggleSocket(Config.socketInput.bool());
+        });
+
         toggleSocket(Config.socketInput.bool());
 
-        Events.on(ServerLoadEvent.class, e -> {
-            if(serverInput != null){
-                Thread thread = new Thread(serverInput, "Server Controls");
-                thread.setDaemon(true);
-                thread.start();
-            }
 
-            info("Server loaded. Type @ for help.", "'help'");
-        });
     }
 
     protected void registerCommands(){
