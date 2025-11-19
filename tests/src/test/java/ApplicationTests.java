@@ -41,7 +41,7 @@ public class ApplicationTests{
     static Map testMap;
     static boolean initialized;
     //core/assets
-    static final Fi testDataFolder = new Fi("../../tests/build/test_data");
+    public static final Fi testDataFolder = new Fi("../../tests/build/test_data");
 
     @BeforeAll
     public static void launchApplication(){
@@ -255,7 +255,11 @@ public class ApplicationTests{
 
     @Test
     void spawnWaves(){
+        // Ensure world is properly set up even if resetWorld() was called
+        Time.setDeltaProvider(() -> 1f);
         world.loadMap(testMap);
+        // Give spawner a chance to reset after map load to ensure spawns are counted
+        spawner.reset();
         assertTrue(spawner.countSpawns() > 0, "No spawns present.");
         logic.runWave();
         //force trigger delayed spawns
@@ -885,6 +889,8 @@ public class ApplicationTests{
                 state.rules.sector = zone.sector;
                 world.loadGenerator(zone.generator.map.width, zone.generator.map.height, zone.generator::generate);
                 zone.rules.get(state.rules);
+                // Ensure spawner is reset after world load
+                spawner.reset();
                 ObjectSet<Item> resources = new ObjectSet<>();
                 boolean hasSpawnPoint = false;
 
