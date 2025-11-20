@@ -221,31 +221,6 @@ public class ServerControl implements ApplicationListener{
             toggleSocket(Config.socketInput.bool());
         });
 
-        Events.on(SaveLoadEvent.class, e -> {
-            Core.app.post(() -> {
-                if(Config.autoPause.bool() && Groups.player.size() == 0){
-                    state.set(State.paused);
-                    autoPaused = true;
-                }
-            });
-        });
-
-        Events.on(PlayerJoin.class, e -> {
-            if(state.isPaused() && autoPaused && Config.autoPause.bool()){
-                state.set(State.playing);
-                autoPaused = false;
-            }
-        });
-
-        Events.on(PlayerLeave.class, e -> {
-            // The player list length is compared with 1 and not 0 here,
-            // because when PlayerLeave gets fired, the player hasn't been removed from the player list yet
-            if(!state.isPaused() && Config.autoPause.bool() && Groups.player.size() == 1){
-                state.set(State.paused);
-                autoPaused = true;
-            }
-        });
-
         Events.on(PlayEvent.class, e -> {
             try{
                 JsonValue value = JsonIO.json.fromJson(null, Core.settings.getString("globalrules"));
@@ -258,7 +233,7 @@ public class ServerControl implements ApplicationListener{
         Events.on(ResetEvent.class, e -> {
             autoPaused = false;
         });
-        
+
         Events.run(Trigger.update, () -> {
             if(Config.autoPause.bool()){
                 if(Groups.player.isEmpty()){
