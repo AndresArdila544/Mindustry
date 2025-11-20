@@ -61,27 +61,9 @@ public class Control implements ApplicationListener, Loadable{
         sound = new SoundControl();
         indicators = new AttackIndicators();
 
-        Events.on(BuildDamageEvent.class, e -> {
-            if(e.build.team == Vars.player.team()){
-                indicators.add(e.build.tileX(), e.build.tileY());
-            }
-        });
-
-        //show dialog saying that mod loading was skipped.
-        Events.on(ClientLoadEvent.class, e -> {
-            if(Vars.mods.skipModLoading() && Vars.mods.list().any()){
-                Time.runTask(4f, () -> {
-                    ui.showInfo("@mods.initfailed");
-                });
-            }
-            checkAutoUnlocks();
-        });
-
-        Events.on(StateChangeEvent.class, event -> {
-            if((event.from == State.playing && event.to == State.menu) || (event.from == State.menu && event.to != State.menu)){
-                Time.runTask(5f, platform::updateRPC);
-            }
-        });
+        setupBuildDamageListener();
+        setupClientLoadListener();
+        setupStateChangeListener();
 
         Events.on(PlayEvent.class, event -> {
             player.team(netServer.assignTeam(player));
@@ -289,6 +271,34 @@ public class Control implements ApplicationListener, Loadable{
 
         Fx.coreBuildBlock.at(build.x, build.y, 0f, build.block);
         build.block.placeEffect.at(build.x, build.y, build.block.size);
+    }
+
+    private void setupBuildDamageListener(){
+        Events.on(BuildDamageEvent.class, e -> {
+            if(e.build.team == Vars.player.team()){
+                indicators.add(e.build.tileX(), e.build.tileY());
+            }
+        });
+    }
+
+    private void setupClientLoadListener(){
+        //show dialog saying that mod loading was skipped.
+        Events.on(ClientLoadEvent.class, e -> {
+            if(Vars.mods.skipModLoading() && Vars.mods.list().any()){
+                Time.runTask(4f, () -> {
+                    ui.showInfo("@mods.initfailed");
+                });
+            }
+            checkAutoUnlocks();
+        });
+    }
+
+    private void setupStateChangeListener(){
+        Events.on(StateChangeEvent.class, event -> {
+            if((event.from == State.playing && event.to == State.menu) || (event.from == State.menu && event.to != State.menu)){
+                Time.runTask(5f, platform::updateRPC);
+            }
+        });
     }
 
     @Override
