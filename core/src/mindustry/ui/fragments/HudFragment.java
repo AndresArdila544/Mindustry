@@ -142,82 +142,10 @@ public class HudFragment{
     }
 
     public void build(Group parent){
-
-        //warn about guardian/boss waves
-        Events.on(WaveEvent.class, e -> {
-            int max = 10;
-            int winWave = state.rules.winWave > 0 ? state.rules.winWave : Integer.MAX_VALUE;
-            outer:
-            for(int i = state.wave - 1; i <= Math.min(state.wave + max, winWave - 2); i++){
-                for(SpawnGroup group : state.rules.spawns){
-                    if(group.effect == StatusEffects.boss && group.getSpawned(i) > 0){
-                        int diff = (i + 2) - state.wave;
-
-                        //increments at which to warn about incoming guardian
-                        if(diff == 1 || diff == 2 || diff == 5 || diff == 10){
-                            showToast(Icon.warning, group.type.emoji() + " " + Core.bundle.format("wave.guardianwarn" + (diff == 1 ? ".one" : ""), diff));
-                        }
-
-                        break outer;
-                    }
-                }
-            }
-        });
-
-        Events.on(SectorCaptureEvent.class, e -> {
-            if(e.sector.isBeingPlayed()){
-                ui.announce("@sector.capture.current", 5f);
-            }else{
-                showToast(Core.bundle.format("sector.capture", e.sector.name()));
-            }
-        });
-
-        Events.on(SectorLoseEvent.class, e -> {
-            showToast(Icon.warning, Core.bundle.format("sector.lost", e.sector.name()));
-        });
-
-        Events.on(SectorInvasionEvent.class, e -> {
-            showToast(Icon.warning, Core.bundle.format("sector.attacked", e.sector.name()));
-        });
-
-        Events.on(ResetEvent.class, e -> {
-            coreItems.resetUsed();
-            coreItems.clear();
-        });
-
-        //paused table
-        parent.fill(t -> {
-            t.name = "paused";
-            t.top().visible(() -> state.isPaused() && shown && !netServer.isWaitingForPlayers()).touchable = Touchable.disabled;
-            t.table(Styles.black6, top -> top.label(() -> state.gameOver && state.isCampaign() ? "@sector.curlost" : "@paused")
-                .style(Styles.outlineLabel).pad(8f)).height(pauseHeight).growX();
-            //.padLeft(dsize * 5 + 4f) to prevent alpha overlap on left
-        });
-
-        //"waiting for players"
-        parent.fill(t -> {
-            t.name = "waiting";
-            t.visible(() -> netServer.isWaitingForPlayers() && state.isPaused() && shown).touchable = Touchable.disabled;
-            t.table(Styles.black6, top -> top.add("@waiting.players").style(Styles.outlineLabel).pad(18f));
-        });
-
-        //minimap + position
-        parent.fill(t -> {
-            t.name = "minimap/position";
-            t.visible(() -> Core.settings.getBool("minimap") && shown);
-            //minimap
-            t.add(new Minimap()).name("minimap");
-            t.row();
-            //position
-            t.label(() ->
-                (Core.settings.getBool("position") ? player.tileX() + "," + player.tileY() + "\n" : "") +
-                (Core.settings.getBool("mouseposition") ? "[lightgray]" + World.toTile(Core.input.mouseWorldX()) + "," + World.toTile(Core.input.mouseWorldY()) : ""))
-            .visible(() -> Core.settings.getBool("position") || Core.settings.getBool("mouseposition"))
-            .touchable(Touchable.disabled)
-            .style(Styles.outlineLabel)
-            .name("position");
-            t.top().right();
-        });
+        setupEventListeners();
+        buildPausedTable(parent);
+        buildWaitingTable(parent);
+        buildMinimap(parent);
 
         ui.hints.build(parent);
 
@@ -496,22 +424,8 @@ public class HudFragment{
             }));
         });
 
-        //spawner warning
-        parent.fill(t -> {
-            t.name = "nearpoint";
-            t.touchable = Touchable.disabled;
-            t.table(Styles.black6, c -> c.add("@nearpoint")
-            .update(l -> l.setColor(Tmp.c1.set(Color.white).lerp(Color.scarlet, Mathf.absin(Time.time, 10f, 1f))))
-            .labelAlign(Align.center, Align.center))
-            .margin(6).update(u -> u.color.a = Mathf.lerpDelta(u.color.a, Mathf.num(spawner.playerNear()), 0.1f)).get().color.a = 0f;
-        });
-
-        //'saving' indicator
-        parent.fill(t -> {
-            t.name = "saving";
-            t.bottom().visible(() -> control.saves.isSaving());
-            t.add("@saving").style(Styles.outlineLabel);
-        });
+        buildSpawnerWarning(parent);
+        buildSavingIndicator(parent);
 
         //TODO DEBUG: rate table
         if(false)
@@ -549,6 +463,111 @@ public class HudFragment{
             });
 
         blockfrag.build(parent);
+    }
+
+    private void setupEventListeners(){
+        //warn about guardian/boss waves
+        Events.on(WaveEvent.class, e -> {
+            int max = 10;
+            int winWave = state.rules.winWave > 0 ? state.rules.winWave : Integer.MAX_VALUE;
+            outer:
+            for(int i = state.wave - 1; i <= Math.min(state.wave + max, winWave - 2); i++){
+                for(SpawnGroup group : state.rules.spawns){
+                    if(group.effect == StatusEffects.boss && group.getSpawned(i) > 0){
+                        int diff = (i + 2) - state.wave;
+
+                        //increments at which to warn about incoming guardian
+                        if(diff == 1 || diff == 2 || diff == 5 || diff == 10){
+                            showToast(Icon.warning, group.type.emoji() + " " + Core.bundle.format("wave.guardianwarn" + (diff == 1 ? ".one" : ""), diff));
+                        }
+
+                        break outer;
+                    }
+                }
+            }
+        });
+
+        Events.on(SectorCaptureEvent.class, e -> {
+            if(e.sector.isBeingPlayed()){
+                ui.announce("@sector.capture.current", 5f);
+            }else{
+                showToast(Core.bundle.format("sector.capture", e.sector.name()));
+            }
+        });
+
+        Events.on(SectorLoseEvent.class, e -> {
+            showToast(Icon.warning, Core.bundle.format("sector.lost", e.sector.name()));
+        });
+
+        Events.on(SectorInvasionEvent.class, e -> {
+            showToast(Icon.warning, Core.bundle.format("sector.attacked", e.sector.name()));
+        });
+
+        Events.on(ResetEvent.class, e -> {
+            coreItems.resetUsed();
+            coreItems.clear();
+        });
+    }
+
+    private void buildPausedTable(Group parent){
+        //paused table
+        parent.fill(t -> {
+            t.name = "paused";
+            t.top().visible(() -> state.isPaused() && shown && !netServer.isWaitingForPlayers()).touchable = Touchable.disabled;
+            t.table(Styles.black6, top -> top.label(() -> state.gameOver && state.isCampaign() ? "@sector.curlost" : "@paused")
+                .style(Styles.outlineLabel).pad(8f)).height(pauseHeight).growX();
+            //.padLeft(dsize * 5 + 4f) to prevent alpha overlap on left
+        });
+    }
+
+    private void buildWaitingTable(Group parent){
+        //"waiting for players"
+        parent.fill(t -> {
+            t.name = "waiting";
+            t.visible(() -> netServer.isWaitingForPlayers() && state.isPaused() && shown).touchable = Touchable.disabled;
+            t.table(Styles.black6, top -> top.add("@waiting.players").style(Styles.outlineLabel).pad(18f));
+        });
+    }
+
+    private void buildMinimap(Group parent){
+        //minimap + position
+        parent.fill(t -> {
+            t.name = "minimap/position";
+            t.visible(() -> Core.settings.getBool("minimap") && shown);
+            //minimap
+            t.add(new Minimap()).name("minimap");
+            t.row();
+            //position
+            t.label(() ->
+                (Core.settings.getBool("position") ? player.tileX() + "," + player.tileY() + "\n" : "") +
+                (Core.settings.getBool("mouseposition") ? "[lightgray]" + World.toTile(Core.input.mouseWorldX()) + "," + World.toTile(Core.input.mouseWorldY()) : ""))
+            .visible(() -> Core.settings.getBool("position") || Core.settings.getBool("mouseposition"))
+            .touchable(Touchable.disabled)
+            .style(Styles.outlineLabel)
+            .name("position");
+            t.top().right();
+        });
+    }
+
+    private void buildSpawnerWarning(Group parent){
+        //spawner warning
+        parent.fill(t -> {
+            t.name = "nearpoint";
+            t.touchable = Touchable.disabled;
+            t.table(Styles.black6, c -> c.add("@nearpoint")
+            .update(l -> l.setColor(Tmp.c1.set(Color.white).lerp(Color.scarlet, Mathf.absin(Time.time, 10f, 1f))))
+            .labelAlign(Align.center, Align.center))
+            .margin(6).update(u -> u.color.a = Mathf.lerpDelta(u.color.a, Mathf.num(spawner.playerNear()), 0.1f)).get().color.a = 0f;
+        });
+    }
+
+    private void buildSavingIndicator(Group parent){
+        //'saving' indicator
+        parent.fill(t -> {
+            t.name = "saving";
+            t.bottom().visible(() -> control.saves.isSaving());
+            t.add("@saving").style(Styles.outlineLabel);
+        });
     }
 
     @Remote(targets = Loc.both, forward = true, called = Loc.both)
