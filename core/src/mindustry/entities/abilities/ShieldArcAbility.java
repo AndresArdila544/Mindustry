@@ -82,12 +82,12 @@ public class ShieldArcAbility extends Ability{
                 paramField.data -= unit.health() * paramField.missileUnitMultiplier * Vars.state.rules.unitDamage(unit.team);
                 paramField.alpha = 1f;
 
-            }else{
+            }else if(paramField.pushUnits && !(!unit.isFlying() && paramUnit.isFlying())){
 
                 float reach = paramField.radius + paramField.width;
                 float overlapDst = reach - unit.dst(paramPos.x,paramPos.y);
 
-                if(overlapDst>0){
+                if(overlapDst > 0){
                     //stop
                     unit.vel.setZero();
                     // get out
@@ -132,7 +132,7 @@ public class ShieldArcAbility extends Ability{
     public @Nullable Color color;
     /** If true, sprite position will be influenced by x/y. */
     public boolean offsetRegion = false;
-
+    public boolean pushUnits = true;
     /** State. */
     protected float widthScale, alpha;
 
