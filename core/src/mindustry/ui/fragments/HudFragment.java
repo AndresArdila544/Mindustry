@@ -40,16 +40,13 @@ public class HudFragment{
 
     public PlacementFragment blockfrag = new PlacementFragment();
     public CoreItemsDisplay coreItems = new CoreItemsDisplay();
+    public ToastManager toastManager = new ToastManager();
     public boolean shown = true;
 
     private ImageButton flip;
 
     private String hudText = "";
     private boolean showHudText;
-
-    private Table lastUnlockTable;
-    private Table lastUnlockLayout;
-    private long lastToast;
 
     private Seq<Block> blocksOut = new Seq<>();
 
@@ -592,146 +589,25 @@ public class HudFragment{
         showHudText = shown;
     }
 
-    private void scheduleToast(Runnable run){
-        long duration = (int)(3.5 * 1000);
-        long since = Time.timeSinceMillis(lastToast);
-        if(since > duration){
-            lastToast = Time.millis();
-            run.run();
-        }else{
-            Time.runTask((duration - since) / 1000f * 60f, run);
-            lastToast += duration;
-        }
-    }
-
     public boolean hasToast(){
-        return Time.timeSinceMillis(lastToast) < 3.5f * 1000f;
+        return toastManager.hasToast();
     }
 
     public void showToast(String text){
-        showToast(Icon.ok, text);
+        toastManager.showToast(text);
     }
 
     public void showToast(Drawable icon, String text){
-        showToast(icon, -1, text);
+        toastManager.showToast(icon, text);
     }
 
     public void showToast(Drawable icon, float size, String text){
-        if(state.isMenu()) return;
-
-        scheduleToast(() -> {
-            Sounds.message.play();
-
-            Table table = new Table(Tex.button);
-            table.update(() -> {
-                if(state.isMenu() || !ui.hudfrag.shown){
-                    table.remove();
-                }
-            });
-            table.margin(12);
-            var cell = table.image(icon).pad(3);
-            if(size > 0) cell.size(size);
-            table.add(text).wrap().width(280f).get().setAlignment(Align.center, Align.center);
-            table.pack();
-
-            //create container table which will align and move
-            Table container = Core.scene.table();
-            container.top().add(table);
-            container.setTranslation(0, table.getPrefHeight());
-            container.actions(Actions.translateBy(0, -table.getPrefHeight(), 1f, Interp.fade), Actions.delay(2.5f),
-            //nesting actions() calls is necessary so the right prefHeight() is used
-            Actions.run(() -> container.actions(Actions.translateBy(0, table.getPrefHeight(), 1f, Interp.fade), Actions.remove())));
-        });
+        toastManager.showToast(icon, size, text);
     }
 
     /** Show unlock notification for a new recipe. */
     public void showUnlock(UnlockableContent content){
-        //some content may not have icons... yet
-        //also don't play in the tutorial to prevent confusion
-        if(state.isMenu()) return;
-
-        Sounds.message.play();
-
-        //if there's currently no unlock notification...
-        if(lastUnlockTable == null){
-            scheduleToast(() -> {
-                Table table = new Table(Tex.button);
-                table.update(() -> {
-                    if(state.isMenu()){
-                        table.remove();
-                        lastUnlockLayout = null;
-                        lastUnlockTable = null;
-                    }
-                });
-                table.margin(12);
-
-                Table in = new Table();
-
-                //create texture stack for displaying
-                Image image = new Image(content.uiIcon);
-                image.setScaling(Scaling.fit);
-
-                in.add(image).size(8 * 6).pad(2);
-
-                //add to table
-                table.add(in).padRight(8);
-                table.add("@unlocked");
-                table.pack();
-
-                //create container table which will align and move
-                Table container = Core.scene.table();
-                container.top().add(table);
-                container.setTranslation(0, table.getPrefHeight());
-                container.actions(Actions.translateBy(0, -table.getPrefHeight(), 1f, Interp.fade), Actions.delay(2.5f),
-                //nesting actions() calls is necessary so the right prefHeight() is used
-                Actions.run(() -> container.actions(Actions.translateBy(0, table.getPrefHeight(), 1f, Interp.fade), Actions.run(() -> {
-                    lastUnlockTable = null;
-                    lastUnlockLayout = null;
-                }), Actions.remove())));
-
-                lastUnlockTable = container;
-                lastUnlockLayout = in;
-            });
-        }else{
-            //max column size
-            int col = 3;
-            //max amount of elements minus extra 'plus'
-            int cap = col * col - 1;
-
-            //get old elements
-            Seq<Element> elements = new Seq<>(lastUnlockLayout.getChildren());
-            int esize = elements.size;
-
-            //...if it's already reached the cap, ignore everything
-            if(esize > cap) return;
-
-            //get size of each element
-            float size = 48f / Math.min(elements.size + 1, col);
-
-            lastUnlockLayout.clearChildren();
-            lastUnlockLayout.defaults().size(size).pad(2);
-
-            for(int i = 0; i < esize; i++){
-                lastUnlockLayout.add(elements.get(i));
-
-                if(i % col == col - 1){
-                    lastUnlockLayout.row();
-                }
-            }
-
-            //if there's space, add it
-            if(esize < cap){
-
-                Image image = new Image(content.uiIcon);
-                image.setScaling(Scaling.fit);
-
-                lastUnlockLayout.add(image);
-            }else{ //else, add a specific icon to denote no more space
-                lastUnlockLayout.image(Icon.add);
-            }
-
-            lastUnlockLayout.pack();
-        }
+        toastManager.showUnlock(content);
     }
 
     private void toggleMenus(){
