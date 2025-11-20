@@ -255,6 +255,10 @@ public class ServerControl implements ApplicationListener{
             }
         });
 
+        Events.on(ResetEvent.class, e -> {
+            autoPaused = false;
+        });
+
         //autosave settings once a minute
         float saveInterval = 60;
         Timer.schedule(() -> {
