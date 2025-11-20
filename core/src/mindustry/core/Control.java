@@ -72,17 +72,7 @@ public class Control implements ApplicationListener, Loadable{
             state.set(State.playing);
         });
 
-        Events.on(WorldLoadEvent.class, event -> {
-            if(Mathf.zero(player.x) && Mathf.zero(player.y)){
-                Building core = player.bestCore();
-                if(core != null){
-                    player.set(core);
-                    camera.position.set(core);
-                }
-            }else{
-                camera.position.set(player);
-            }
-        });
+        setupWorldLoadListeners();
 
         Events.on(SaveLoadEvent.class, event -> {
             input.checkUnit();
@@ -106,23 +96,86 @@ public class Control implements ApplicationListener, Loadable{
             Sounds.wave.play();
         });
 
-        Events.on(GameOverEvent.class, event -> {
-            state.stats.wavesLasted = state.wave;
-            Effect.shake(5, 6, Core.camera.position.x, Core.camera.position.y);
-            //the restart dialog can show info for any number of scenarios
-            Call.gameOver(event.winner);
+        setupGameOverListeners();
+        setupSectorListeners();
+        setupNewGameListener();
+
+        Events.on(SaveWriteEvent.class, e -> forcePlaceAll());
+        Events.on(HostEvent.class, e -> forcePlaceAll());
+        Events.on(HostEvent.class, e -> {
+            state.set(State.playing);
+        });
+    }
+
+    private void forcePlaceAll(){
+        //force set buildings when a save is done or map is hosted, to prevent desyncs
+        for(var build : toBePlaced){
+            placeLandBuild(build);
+        }
+
+        toBePlaced.clear();
+    }
+
+    private void placeLandBuild(Building build){
+        build.tile.setBlock(build.block, build.team, build.rotation, () -> build);
+        build.dropped();
+
+        Fx.coreBuildBlock.at(build.x, build.y, 0f, build.block);
+        build.block.placeEffect.at(build.x, build.y, build.block.size);
+    }
+
+    private void setupBuildDamageListener(){
+        Events.on(BuildDamageEvent.class, e -> {
+            if(e.build.team == Vars.player.team()){
+                indicators.add(e.build.tileX(), e.build.tileY());
+            }
+        });
+    }
+
+    private void setupClientLoadListener(){
+        //show dialog saying that mod loading was skipped.
+        Events.on(ClientLoadEvent.class, e -> {
+            if(Vars.mods.skipModLoading() && Vars.mods.list().any()){
+                Time.runTask(4f, () -> {
+                    ui.showInfo("@mods.initfailed");
+                });
+            }
+            checkAutoUnlocks();
+        });
+    }
+
+    private void setupStateChangeListener(){
+        Events.on(StateChangeEvent.class, event -> {
+            if((event.from == State.playing && event.to == State.menu) || (event.from == State.menu && event.to != State.menu)){
+                Time.runTask(5f, platform::updateRPC);
+            }
+        });
+    }
+
+    private void setupWorldLoadListeners(){
+        // Set player/camera position based on player position
+        Events.on(WorldLoadEvent.class, event -> {
+            if(Mathf.zero(player.x) && Mathf.zero(player.y)){
+                Building core = player.bestCore();
+                if(core != null){
+                    player.set(core);
+                    camera.position.set(core);
+                }
+            }else{
+                camera.position.set(player);
+            }
         });
 
-        //add player when world loads regardless
+        // Add player when world loads regardless
         Events.on(WorldLoadEvent.class, e -> {
             player.add();
-            //make player admin on any load when hosting
+            // Make player admin on any load when hosting
             if(net.active() && net.server()){
                 player.admin = true;
             }
         });
 
-        //autohost for pvp maps
+        // Autohost for PVP maps
         Events.on(WorldLoadEvent.class, event -> app.post(() -> {
             if(state.rules.pvp && !net.active()){
                 try{
@@ -134,7 +187,28 @@ public class Control implements ApplicationListener, Loadable{
                 }
             }
         }));
+    }
 
+    private void setupGameOverListeners(){
+        Events.on(GameOverEvent.class, event -> {
+            state.stats.wavesLasted = state.wave;
+            Effect.shake(5, 6, Core.camera.position.x, Core.camera.position.y);
+            //the restart dialog can show info for any number of scenarios
+            Call.gameOver(event.winner);
+        });
+
+        // Delete save on campaign game over
+        Events.on(GameOverEvent.class, e -> {
+            if(state.isCampaign() && !net.client() && !headless){
+                //save gameover state immediately
+                if(saves.getCurrent() != null){
+                    saves.getCurrent().save();
+                }
+            }
+        });
+    }
+
+    private void setupSectorListeners(){
         Events.on(UnlockEvent.class, e -> {
             if(e.content.showUnlock()){
                 ui.hudfrag.showUnlock(e.content);
@@ -160,18 +234,9 @@ public class Control implements ApplicationListener, Loadable{
                 });
             }
         });
+    }
 
-        //delete save on campaign game over
-        Events.on(GameOverEvent.class, e -> {
-            if(state.isCampaign() && !net.client() && !headless){
-
-                //save gameover sate immediately
-                if(saves.getCurrent() != null){
-                    saves.getCurrent().save();
-                }
-            }
-        });
-
+    private void setupNewGameListener(){
         Events.run(Trigger.newGame, () -> {
             var core = player.bestCore();
             if(core == null) return;
@@ -246,57 +311,6 @@ public class Control implements ApplicationListener, Loadable{
                         }
                     }
                 }
-            }
-        });
-
-        Events.on(SaveWriteEvent.class, e -> forcePlaceAll());
-        Events.on(HostEvent.class, e -> forcePlaceAll());
-        Events.on(HostEvent.class, e -> {
-            state.set(State.playing);
-        });
-    }
-
-    private void forcePlaceAll(){
-        //force set buildings when a save is done or map is hosted, to prevent desyncs
-        for(var build : toBePlaced){
-            placeLandBuild(build);
-        }
-
-        toBePlaced.clear();
-    }
-
-    private void placeLandBuild(Building build){
-        build.tile.setBlock(build.block, build.team, build.rotation, () -> build);
-        build.dropped();
-
-        Fx.coreBuildBlock.at(build.x, build.y, 0f, build.block);
-        build.block.placeEffect.at(build.x, build.y, build.block.size);
-    }
-
-    private void setupBuildDamageListener(){
-        Events.on(BuildDamageEvent.class, e -> {
-            if(e.build.team == Vars.player.team()){
-                indicators.add(e.build.tileX(), e.build.tileY());
-            }
-        });
-    }
-
-    private void setupClientLoadListener(){
-        //show dialog saying that mod loading was skipped.
-        Events.on(ClientLoadEvent.class, e -> {
-            if(Vars.mods.skipModLoading() && Vars.mods.list().any()){
-                Time.runTask(4f, () -> {
-                    ui.showInfo("@mods.initfailed");
-                });
-            }
-            checkAutoUnlocks();
-        });
-    }
-
-    private void setupStateChangeListener(){
-        Events.on(StateChangeEvent.class, event -> {
-            if((event.from == State.playing && event.to == State.menu) || (event.from == State.menu && event.to != State.menu)){
-                Time.runTask(5f, platform::updateRPC);
             }
         });
     }
