@@ -662,18 +662,41 @@ public class Control implements ApplicationListener, Loadable{
         //this happens on Android and nobody knows why
         if(assets == null) return;
 
-        saves.update();
+        updateSaves();
+        updateAssets();
+        updateInput();
+        updateSound();
+        handleFullscreenToggle();
+        validatePlayerPosition();
 
+        if(state.isGame()){
+            updateGameState();
+        }else{
+            updateMenuState();
+        }
+    }
+
+    private void updateSaves(){
+        saves.update();
+    }
+
+    private void updateAssets(){
         //update and load any requested assets
         try{
             assets.update();
         }catch(Exception ignored){
         }
+    }
 
+    private void updateInput(){
         input.updateState();
+    }
 
+    private void updateSound(){
         sound.update();
+    }
 
+    private void handleFullscreenToggle(){
         if(Core.input.keyTap(Binding.fullscreen)){
             boolean full = settings.getBool("fullscreen");
             if(full){
@@ -683,68 +706,82 @@ public class Control implements ApplicationListener, Loadable{
             }
             settings.put("fullscreen", !full);
         }
+    }
 
+    private void validatePlayerPosition(){
         if(Float.isNaN(Vars.player.x) || Float.isNaN(Vars.player.y)){
             player.set(0, 0);
             if(!player.dead()) player.unit().kill();
         }
         if(Float.isNaN(camera.position.x)) camera.position.x = world.unitWidth()/2f;
         if(Float.isNaN(camera.position.y)) camera.position.y = world.unitHeight()/2f;
+    }
 
-        if(state.isGame()){
-            input.update();
-            if(!state.isPaused()){
-                indicators.update();
-            }
+    private void updateGameState(){
+        input.update();
+        if(!state.isPaused()){
+            indicators.update();
+        }
 
-            //auto-update rpc every 5 seconds
-            if(timer.get(0, 60 * 5)){
-                platform.updateRPC();
-            }
+        //auto-update rpc every 5 seconds
+        if(timer.get(0, 60 * 5)){
+            platform.updateRPC();
+        }
 
-            //unlock core items
-            var core = state.rules.defaultTeam.core();
-            if(!net.client() && core != null && state.isCampaign()){
-                core.items.each((i, a) -> i.unlock());
-            }
+        //unlock core items
+        var core = state.rules.defaultTeam.core();
+        if(!net.client() && core != null && state.isCampaign()){
+            core.items.each((i, a) -> i.unlock());
+        }
 
-            if(backgroundPaused && settings.getBool("backgroundpause") && !net.active()){
-                state.set(State.paused);
-            }
+        if(backgroundPaused && settings.getBool("backgroundpause") && !net.active()){
+            state.set(State.paused);
+        }
 
-            //cannot launch while paused
-            if(state.isPaused() && renderer.isCutscene()){
-                state.set(State.playing);
-            }
+        //cannot launch while paused
+        if(state.isPaused() && renderer.isCutscene()){
+            state.set(State.playing);
+        }
 
-            if(!net.client() && Core.input.keyTap(Binding.pause) && !renderer.isCutscene() && !scene.hasDialog() && !scene.hasKeyboard() && !ui.restart.isShown() && (state.is(State.paused) || state.is(State.playing))){
-                state.set(state.isPaused() ? State.playing : State.paused);
-            }
+        handlePauseInput();
+        handleMenuInput();
 
-            if(Core.input.keyTap(Binding.menu) && !ui.restart.isShown() && !ui.minimapfrag.shown()){
-                if(ui.chatfrag.shown()){
-                    ui.chatfrag.hide();
-                }else if(!ui.paused.isShown() && !scene.hasDialog()){
-                    ui.paused.show();
-                    if(!net.active()){
-                        state.set(State.paused);
-                    }
+        if(!mobile && Core.input.keyTap(Binding.screenshot) && !scene.hasField() && !scene.hasKeyboard()){
+            renderer.takeMapScreenshot();
+        }
+    }
+
+    private boolean canTogglePause(){
+        return !net.client() && Core.input.keyTap(Binding.pause) && !renderer.isCutscene() && !scene.hasDialog() && !scene.hasKeyboard() && !ui.restart.isShown() && (state.is(State.paused) || state.is(State.playing));
+    }
+
+    private void handlePauseInput(){
+        if(canTogglePause()){
+            state.set(state.isPaused() ? State.playing : State.paused);
+        }
+    }
+
+    private void handleMenuInput(){
+        if(Core.input.keyTap(Binding.menu) && !ui.restart.isShown() && !ui.minimapfrag.shown()){
+            if(ui.chatfrag.shown()){
+                ui.chatfrag.hide();
+            }else if(!ui.paused.isShown() && !scene.hasDialog()){
+                ui.paused.show();
+                if(!net.active()){
+                    state.set(State.paused);
                 }
             }
+        }
+    }
 
-            if(!mobile && Core.input.keyTap(Binding.screenshot) && !scene.hasField() && !scene.hasKeyboard()){
-                renderer.takeMapScreenshot();
-            }
+    private void updateMenuState(){
+        //this runs in the menu
+        if(!state.isPaused()){
+            Time.update();
+        }
 
-        }else{
-            //this runs in the menu
-            if(!state.isPaused()){
-                Time.update();
-            }
-
-            if(!scene.hasDialog() && !scene.root.getChildren().isEmpty() && !(scene.root.getChildren().peek() instanceof Dialog) && Core.input.keyTap(KeyCode.back)){
-                platform.hide();
-            }
+        if(!scene.hasDialog() && !scene.root.getChildren().isEmpty() && !(scene.root.getChildren().peek() instanceof Dialog) && Core.input.keyTap(KeyCode.back)){
+            platform.hide();
         }
     }
 }
