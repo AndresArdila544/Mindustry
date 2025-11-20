@@ -50,10 +50,10 @@ public class Control implements ApplicationListener, Loadable{
     public SoundControl sound;
     public InputHandler input;
     public AttackIndicators indicators;
+    public GameStateManager gameStateManager = new GameStateManager();
 
     private Interval timer = new Interval(2);
     private boolean hiscore = false;
-    private boolean wasPaused = false, backgroundPaused = false;
     private Seq<Building> toBePlaced = new Seq<>(false);
 
     public Control(){
@@ -604,19 +604,12 @@ public class Control implements ApplicationListener, Loadable{
 
     @Override
     public void pause(){
-        if(settings.getBool("backgroundpause", true) && !net.active()){
-            backgroundPaused = true;
-            wasPaused = state.is(State.paused);
-            if(state.is(State.playing)) state.set(State.paused);
-        }
+        gameStateManager.onApplicationPause();
     }
 
     @Override
     public void resume(){
-        if(state.is(State.paused) && !wasPaused && settings.getBool("backgroundpause", true) && !net.active()){
-            state.set(State.playing);
-        }
-        backgroundPaused = false;
+        gameStateManager.onApplicationResume();
     }
 
     @Override
@@ -734,43 +727,12 @@ public class Control implements ApplicationListener, Loadable{
             core.items.each((i, a) -> i.unlock());
         }
 
-        if(backgroundPaused && settings.getBool("backgroundpause") && !net.active()){
-            state.set(State.paused);
-        }
-
-        //cannot launch while paused
-        if(state.isPaused() && renderer.isCutscene()){
-            state.set(State.playing);
-        }
-
-        handlePauseInput();
-        handleMenuInput();
+        gameStateManager.updatePauseState();
+        gameStateManager.handlePauseInput();
+        gameStateManager.handleMenuInput();
 
         if(!mobile && Core.input.keyTap(Binding.screenshot) && !scene.hasField() && !scene.hasKeyboard()){
             renderer.takeMapScreenshot();
-        }
-    }
-
-    private boolean canTogglePause(){
-        return !net.client() && Core.input.keyTap(Binding.pause) && !renderer.isCutscene() && !scene.hasDialog() && !scene.hasKeyboard() && !ui.restart.isShown() && (state.is(State.paused) || state.is(State.playing));
-    }
-
-    private void handlePauseInput(){
-        if(canTogglePause()){
-            state.set(state.isPaused() ? State.playing : State.paused);
-        }
-    }
-
-    private void handleMenuInput(){
-        if(Core.input.keyTap(Binding.menu) && !ui.restart.isShown() && !ui.minimapfrag.shown()){
-            if(ui.chatfrag.shown()){
-                ui.chatfrag.hide();
-            }else if(!ui.paused.isShown() && !scene.hasDialog()){
-                ui.paused.show();
-                if(!net.active()){
-                    state.set(State.paused);
-                }
-            }
         }
     }
 
