@@ -53,18 +53,20 @@ public class Control implements ApplicationListener, Loadable{
     public GameStateManager gameStateManager = new GameStateManager();
     public SectorLoader sectorLoader = new SectorLoader(this);
 
+    public ControlEventHandler eventHandler = new ControlEventHandler(this);
+
     private Interval timer = new Interval(2);
     private boolean hiscore = false;
-    private Seq<Building> toBePlaced = new Seq<>(false);
+    Seq<Building> toBePlaced = new Seq<>(false);
 
     public Control(){
         saves = new Saves();
         sound = new SoundControl();
         indicators = new AttackIndicators();
 
-        setupBuildDamageListener();
-        setupClientLoadListener();
-        setupStateChangeListener();
+        eventHandler.setupBuildDamageListener();
+        eventHandler.setupClientLoadListener();
+        eventHandler.setupStateChangeListener();
 
         Events.on(PlayEvent.class, event -> {
             player.team(netServer.assignTeam(player));
@@ -73,7 +75,7 @@ public class Control implements ApplicationListener, Loadable{
             state.set(State.playing);
         });
 
-        setupWorldLoadListeners();
+        eventHandler.setupWorldLoadListeners();
 
         Events.on(SaveLoadEvent.class, event -> {
             input.checkUnit();
@@ -97,9 +99,9 @@ public class Control implements ApplicationListener, Loadable{
             Sounds.wave.play();
         });
 
-        setupGameOverListeners();
-        setupSectorListeners();
-        setupNewGameListener();
+        eventHandler.setupGameOverListeners();
+        eventHandler.setupSectorListeners();
+        eventHandler.setupNewGameListener();
 
         Events.on(SaveWriteEvent.class, e -> forcePlaceAll());
         Events.on(HostEvent.class, e -> forcePlaceAll());
@@ -117,203 +119,12 @@ public class Control implements ApplicationListener, Loadable{
         toBePlaced.clear();
     }
 
-    private void placeLandBuild(Building build){
+    void placeLandBuild(Building build){
         build.tile.setBlock(build.block, build.team, build.rotation, () -> build);
         build.dropped();
 
         Fx.coreBuildBlock.at(build.x, build.y, 0f, build.block);
         build.block.placeEffect.at(build.x, build.y, build.block.size);
-    }
-
-    private void setupBuildDamageListener(){
-        Events.on(BuildDamageEvent.class, e -> {
-            if(e.build.team == Vars.player.team()){
-                indicators.add(e.build.tileX(), e.build.tileY());
-            }
-        });
-    }
-
-    private void setupClientLoadListener(){
-        //show dialog saying that mod loading was skipped.
-        Events.on(ClientLoadEvent.class, e -> {
-            if(Vars.mods.skipModLoading() && Vars.mods.list().any()){
-                Time.runTask(4f, () -> {
-                    ui.showInfo("@mods.initfailed");
-                });
-            }
-            checkAutoUnlocks();
-        });
-    }
-
-    private void setupStateChangeListener(){
-        Events.on(StateChangeEvent.class, event -> {
-            if((event.from == State.playing && event.to == State.menu) || (event.from == State.menu && event.to != State.menu)){
-                Time.runTask(5f, platform::updateRPC);
-            }
-        });
-    }
-
-    private void setupWorldLoadListeners(){
-        // Set player/camera position based on player position
-        Events.on(WorldLoadEvent.class, event -> {
-            if(Mathf.zero(player.x) && Mathf.zero(player.y)){
-                Building core = player.bestCore();
-                if(core != null){
-                    player.set(core);
-                    camera.position.set(core);
-                }
-            }else{
-                camera.position.set(player);
-            }
-        });
-
-        // Add player when world loads regardless
-        Events.on(WorldLoadEvent.class, e -> {
-            player.add();
-            // Make player admin on any load when hosting
-            if(net.active() && net.server()){
-                player.admin = true;
-            }
-        });
-
-        // Autohost for PVP maps
-        Events.on(WorldLoadEvent.class, event -> app.post(() -> {
-            if(state.rules.pvp && !net.active()){
-                try{
-                    net.host(port);
-                    player.admin = true;
-                }catch(IOException e){
-                    ui.showException("@server.error", e);
-                    state.set(State.menu);
-                }
-            }
-        }));
-    }
-
-    private void setupGameOverListeners(){
-        Events.on(GameOverEvent.class, event -> {
-            state.stats.wavesLasted = state.wave;
-            Effect.shake(5, 6, Core.camera.position.x, Core.camera.position.y);
-            //the restart dialog can show info for any number of scenarios
-            Call.gameOver(event.winner);
-        });
-
-        // Delete save on campaign game over
-        Events.on(GameOverEvent.class, e -> {
-            if(state.isCampaign() && !net.client() && !headless){
-                //save gameover state immediately
-                if(saves.getCurrent() != null){
-                    saves.getCurrent().save();
-                }
-            }
-        });
-    }
-
-    private void setupSectorListeners(){
-        Events.on(UnlockEvent.class, e -> {
-            if(e.content.showUnlock()){
-                ui.hudfrag.showUnlock(e.content);
-            }
-
-            checkAutoUnlocks();
-
-            if(e.content instanceof SectorPreset){
-                for(TechNode node : TechTree.all){
-                    if(!node.content.unlocked() && node.objectives.contains(o -> o instanceof SectorComplete sec && sec.preset == e.content) && !node.objectives.contains(o -> !o.complete())){
-                        ui.hudfrag.showToast(new TextureRegionDrawable(node.content.uiIcon), iconLarge, bundle.get("available"));
-                    }
-                }
-            }
-        });
-
-        Events.on(SectorCaptureEvent.class, e -> {
-            app.post(this::checkAutoUnlocks);
-
-            if(!net.client() && e.sector.preset != null && e.sector.preset.isLastSector && e.initialCapture){
-                Time.run(60f * 2f, () -> {
-                    ui.campaignComplete.show(e.sector.planet);
-                });
-            }
-        });
-    }
-
-    private void setupNewGameListener(){
-        Events.run(Trigger.newGame, () -> {
-            var core = player.bestCore();
-            if(core == null) return;
-
-            camera.position.set(core);
-            player.set(core);
-
-            float coreDelay = 0f;
-            if(!settings.getBool("skipcoreanimation") && !state.rules.pvp){
-                coreDelay = core.launchDuration();
-                //delay player respawn so animation can play.
-                player.deathTimer = Player.deathDelay - core.launchDuration();
-                //TODO this sounds pretty bad due to conflict
-                if(settings.getInt("musicvol") > 0){
-                    //TODO what to do if another core with different music is already playing?
-                    Music music = core.landMusic();
-                    music.stop();
-                    music.play();
-                    music.setVolume(settings.getInt("musicvol") / 100f);
-                }
-
-                renderer.showLanding(core);
-            }
-
-            if(state.isCampaign()){
-                if(state.rules.sector.info.importRateCache != null){
-                    state.rules.sector.info.refreshImportRates(state.rules.sector.planet);
-                }
-
-                //don't run when hosting, that doesn't really work.
-                if(state.rules.sector.planet.prebuildBase){
-                    toBePlaced.clear();
-                    float unitsPerTick = 2f;
-                    float buildRadius = state.rules.enemyCoreBuildRadius * 1.5f;
-
-                    //TODO if the save is unloaded or map is hosted, these blocks do not get built.
-                    boolean anyBuilds = false;
-                    for(var build : state.rules.defaultTeam.data().buildings.copy()){
-                        if(!(build instanceof CoreBuild) && !build.block.privileged){
-                            var ccore = build.closestCore();
-
-                            if(ccore != null){
-                                anyBuilds = true;
-
-                                if(!net.active()){
-                                    build.pickedUp();
-                                    build.tile.remove();
-
-                                    toBePlaced.add(build);
-
-                                    Time.run(build.dst(ccore) / unitsPerTick + coreDelay, () -> {
-                                        if(build.tile.build != build){
-                                            placeLandBuild(build);
-
-                                            toBePlaced.remove(build);
-                                        }
-                                    });
-                                }else{
-                                    //when already hosting, instantly build everything. this looks bad but it's better than a desync
-                                    Fx.coreBuildBlock.at(build.x, build.y, 0f, build.block);
-                                    build.block.placeEffect.at(build.x, build.y, build.block.size);
-                                }
-                            }
-                        }
-                    }
-
-                    if(anyBuilds){
-                        for(var ccore : state.rules.defaultTeam.data().cores){
-                            Time.run(coreDelay, () -> {
-                                Fx.coreBuildShockwave.at(ccore.x, ccore.y, buildRadius);
-                            });
-                        }
-                    }
-                }
-            }
-        });
     }
 
     @Override
