@@ -258,6 +258,21 @@ public class ServerControl implements ApplicationListener{
         Events.on(ResetEvent.class, e -> {
             autoPaused = false;
         });
+        
+        Events.run(Trigger.update, () -> {
+            if(Config.autoPause.bool()){
+                if(Groups.player.isEmpty()){
+                    autoPaused = true;
+                    state.set(State.paused);
+                }else if(autoPaused){
+                    autoPaused = false;
+                    state.set(State.playing);
+                }
+            }else if(autoPaused && Vars.state.isPaused()){ //unpause when the config is disabled
+                state.set(State.playing);
+                autoPaused = false;
+            }
+        });
 
         //autosave settings once a minute
         float saveInterval = 60;
