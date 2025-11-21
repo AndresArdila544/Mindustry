@@ -109,7 +109,7 @@ public class ServerControl implements ApplicationListener{
 
         // Make a list of items to be setup
         setupItems = new ArrayList<SetupItem>();
-        setupItems.add(new CoreSettingsSetup());
+        setupItems.add(new CoreSettingsSetup(args));
         setupItems.add(new LoggingSystemSetup());
         setupItems.add(new GameFlowSetup());
         setupItems.add(new GameSavingSetup());
@@ -134,60 +134,6 @@ public class ServerControl implements ApplicationListener{
             setupItems.get(i).setup();
         }
 
-    }
-
-
-    private void setupCore(String[] args) {
-        Core.settings.defaults(
-            "bans", "",
-            "admins", "",
-            "shufflemode", "custom",
-            "globalrules", "{reactorExplosions: false, logicUnitBuild: false}"
-        );
-
-        try{
-            lastMode = Gamemode.valueOf(Core.settings.getString("lastServerMode", "survival"));
-        }catch(Exception e){ //handle enum parse exception
-            lastMode = Gamemode.survival;
-        }
-
-        Core.app.post(() -> {
-            //try to load auto-update save if possible
-            if(Config.autoUpdate.bool()){
-                Fi fi = saveDirectory.child("autosavebe." + saveExtension);
-                if(fi.exists()){
-                    try{
-                        SaveIO.load(fi);
-                        info("Auto-save loaded.");
-                        state.set(State.playing);
-                        netServer.openServer();
-                    }catch(Throwable e){
-                        err(e);
-                    }
-                }
-            }
-
-            Seq<String> commands = new Seq<>();
-
-            if(args.length > 0){
-                commands.addAll(Strings.join(" ", args).split(","));
-                info("Found @ command-line arguments to parse.", commands.size);
-            }
-
-            if(!Config.startCommands.string().isEmpty()){
-                String[] startup = Strings.join(" ", Config.startCommands.string()).split(",");
-                info("Found @ startup commands.", startup.length);
-                commands.addAll(startup);
-            }
-
-            for(String s : commands){
-                CommandResponse response = handler.handleMessage(s);
-                if(response.type != ResponseType.valid){
-                    err("Invalid command argument sent: '@': @", s, response.type.name());
-                    err("Argument usage: &lb<command-1> <command1-args...>,<command-2> <command-2-args2...>");
-                }
-            }
-        });
     }
 
     protected void registerCommands(){
