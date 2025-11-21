@@ -5,6 +5,7 @@ import arc.Events;
 import arc.func.Cons;
 import arc.util.Strings;
 import arc.util.serialization.JsonValue;
+import mindustry.Vars;
 import mindustry.core.GameState;
 import mindustry.game.EventType;
 import mindustry.gen.Call;
@@ -15,6 +16,7 @@ import mindustry.maps.Maps;
 import mindustry.net.Administration;
 import mindustry.net.Packets;
 import mindustry.server.ServerControl;
+import mindustry.game.EventType.*;
 
 import java.util.Scanner;
 
@@ -65,6 +67,49 @@ public class GameFlowSetup extends SetupItem
                 JsonIO.json.readFields(state.rules, value);
             }catch(Throwable t){
                 err("Error applying custom rules, proceeding without them.", t);
+            }
+        });
+
+        Events.on(EventType.ResetEvent.class, e -> {
+            ServerControl.instance.setAutoPaused(false);
+        });
+
+        // when a new game is started
+        Events.run(Trigger.newGame, () -> {
+
+            // if autopause is enabled
+            if(Administration.Config.autoPause.bool()) {
+                // if there are no players, autopause the game
+                if (Groups.player.isEmpty()) {
+                    ServerControl.instance.setAutoPaused(true);
+                    state.set(GameState.State.paused);
+
+                    // if there are players, and the game is paused, play it
+                } else if (ServerControl.instance.isAutoPaused()) {
+                    ServerControl.instance.setAutoPaused(false);
+                    state.set(GameState.State.playing);
+                }
+            }
+
+            // if autopause is disabled, start the game right away
+            else if(ServerControl.instance.isAutoPaused()) {
+                ServerControl.instance.setAutoPaused(false);
+                state.set(GameState.State.playing);
+            }
+        });
+
+        Events.run(EventType.Trigger.update, () -> {
+            if(Administration.Config.autoPause.bool()){
+                if(Groups.player.isEmpty()){
+                    ServerControl.instance.setAutoPaused(true);
+                    state.set(GameState.State.paused);
+                }else if(ServerControl.instance.isAutoPaused()){
+                    ServerControl.instance.setAutoPaused(false);
+                    state.set(GameState.State.playing);
+                }
+            }else if(ServerControl.instance.isAutoPaused() && Vars.state.isPaused()){ //unpause when the config is disabled
+                state.set(GameState.State.playing);
+                ServerControl.instance.setAutoPaused(false);
             }
         });
     }

@@ -19,22 +19,6 @@ public class GameModerationSetup extends SetupItem
     @Override
     public void initiateEvents() {
 
-        Events.on(EventType.PlayerJoin.class, e -> {
-            if(state.isPaused() && ServerControl.instance.isAutoPaused() && Administration.Config.autoPause.bool()){
-                state.set(GameState.State.playing);
-                ServerControl.instance.setAutoPaused(false);
-            }
-        });
-
-        Events.on(EventType.PlayerLeave.class, e -> {
-            // The player list length is compared with 1 and not 0 here,
-            // because when PlayerLeave gets fired, the player hasn't been removed from the player list yet
-            if(!state.isPaused() && Administration.Config.autoPause.bool() && Groups.player.size() == 1){
-                state.set(GameState.State.paused);
-                ServerControl.instance.setAutoPaused(true);
-            }
-        });
-
     }
 
     @Override
