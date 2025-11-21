@@ -134,6 +134,11 @@ public class StatusDisplayBuilder{
             updateSkipWavePadding(table, lcell, couldSkip);
             builder.setLength(0);
 
+            //do not show status after game over
+            if(state.afterGameOver && state.isCampaign()){
+                return builder;
+            }
+
             String missionOrObjectives = buildMissionOrObjectivesText(builder);
             if(missionOrObjectives != null) return builder;
 

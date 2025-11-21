@@ -24,6 +24,8 @@ public class GameState{
     public boolean gameOver = false;
     /** Whether the player's team won the match. */
     public boolean won = false;
+    /** For the campaign, this is whether the map is in a "after game over" state. In this state, the game is always paused. */
+    public boolean afterGameOver = false;
     /** Server ticks/second. Only valid in multiplayer. */
     public int serverTps = -1;
     /** Map that is currently being played on. */

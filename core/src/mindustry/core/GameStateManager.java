@@ -20,7 +20,7 @@ public class GameStateManager{
      * @return true if pause can be toggled
      */
     public boolean canTogglePause(){
-        return !net.client() && Core.input.keyTap(Binding.pause) && !renderer.isCutscene() && !scene.hasDialog() && !scene.hasKeyboard() && !ui.restart.isShown() && (state.is(State.paused) || state.is(State.playing));
+        return !net.client() && Core.input.keyTap(Binding.pause) && !(state.isCampaign() && state.afterGameOver) && !renderer.isCutscene() && !scene.hasDialog() && !scene.hasKeyboard() && !ui.restart.isShown() && (state.is(State.paused) || state.is(State.playing));
     }
 
     /**
@@ -53,6 +53,12 @@ public class GameStateManager{
      * Handles background pause and cutscene unpause logic.
      */
     public void updatePauseState(){
+        // Force pause state when after game over in campaign
+        if(state.isCampaign() && state.afterGameOver){
+            state.set(State.paused);
+            return;
+        }
+
         if(backgroundPaused && settings.getBool("backgroundpause") && !net.active()){
             state.set(State.paused);
         }

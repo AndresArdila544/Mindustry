@@ -40,6 +40,9 @@ public class GameOverDialog extends BaseDialog{
     public void show(Team winner){
         this.winner = winner;
         show();
+        if(state.isCampaign()){
+            state.afterGameOver = true;
+        }
         if(winner == player.team()){
             Events.fire(new WinEvent());
         }else{
