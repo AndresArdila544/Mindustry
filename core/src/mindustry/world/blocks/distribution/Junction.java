@@ -3,6 +3,9 @@ package mindustry.world.blocks.distribution;
 import arc.util.*;
 import arc.util.io.*;
 import mindustry.gen.*;
+import mindustry.helper.ConveyorGeometryUtils;
+import mindustry.helper.ConveyorTimingController;
+import mindustry.helper.ItemRoutingController;
 import mindustry.type.*;
 import mindustry.world.*;
 import mindustry.world.meta.*;
@@ -39,8 +42,14 @@ public class Junction extends Block{
         return true;
     }
 
-    public class JunctionBuild extends Building{
-        public DirectionalItemBuffer buffer = new DirectionalItemBuffer(capacity);
+    public class JunctionBuild extends Building {
+
+        DirectionalItemBuffer buffer = new DirectionalItemBuffer(6);
+
+        // Extracted controllers
+        ItemRoutingController routing = new ItemRoutingController();
+        ConveyorTimingController timing = new ConveyorTimingController();
+        ConveyorGeometryUtils geometry = new ConveyorGeometryUtils();
 
         @Override
         public int acceptStack(Item item, int amount, Teamc source){
@@ -49,61 +58,42 @@ public class Junction extends Block{
 
         @Override
         public void updateTile(){
+            for(int side = 0; side < 4; side++){
+                if(buffer.indexes[side] <= 0) continue;
 
-            for(int i = 0; i < 4; i++){
-                if(buffer.indexes[i] > 0){
-                    if(buffer.indexes[i] > capacity) buffer.indexes[i] = capacity;
-                    long l = buffer.buffers[i][0];
-                    float time = BufferItem.time(l);
+                long packed = buffer.buffers[side][0];
+                float inputTime = BufferItem.time(packed);
 
-                    if(Time.time >= time + speed / timeScale || Time.time < time){
+                if(!timing.readyToTransfer(inputTime, ((Junction)block).speed, Time.delta)) continue;
 
-                        Item item = content.item(BufferItem.item(l));
-                        Building dest = nearby(i);
+                Item item = content.item(BufferItem.item(packed));
+                Building dest = nearby(side);
 
-                        //skip blocks that don't want the item, keep waiting until they do
-                        if(item == null || dest == null || !dest.acceptItem(this, item) || dest.team != team){
-                            continue;
-                        }
+                if(dest == null || item == null) continue;
 
-                        dest.handleItem(this, item);
-                        System.arraycopy(buffer.buffers[i], 1, buffer.buffers[i], 0, buffer.indexes[i] - 1);
-                        buffer.indexes[i] --;
-                    }
-                }
+                if(!dest.acceptItem(this, item) || dest.team != team) continue;
+
+                dest.handleItem(this, item);
+
+                System.arraycopy(buffer.buffers[side], 1, buffer.buffers[side], 0, buffer.indexes[side] - 1);
+                buffer.indexes[side]--;
             }
         }
 
         @Override
         public void handleItem(Building source, Item item){
-            int relative = source.relativeTo(tile);
-            buffer.accept(relative, item);
+            routing.routeItemToBuffer(buffer, this, source, item);
         }
 
         @Override
         public boolean acceptItem(Building source, Item item){
-            int relative = source.relativeTo(tile);
+            int rel = source.relativeTo(tile);
 
-            if(relative == -1 || !buffer.accepts(relative)) return false;
-            Building to = nearby(relative);
-            return to != null && to.team == team;
-        }
+            boolean accepts = rel != -1 && buffer.accepts(rel);
+            Building next = nearby(rel);
+            boolean sameTeam = next != null && next.team == team;
 
-        @Override
-        public byte version(){
-            return 1;
-        }
-
-        @Override
-        public void write(Writes write){
-            super.write(write);
-            buffer.write(write);
-        }
-
-        @Override
-        public void read(Reads read, byte revision){
-            super.read(read, revision);
-            buffer.read(read, revision == 0);
+            return routing.canAccept(this, source, item, accepts, true, sameTeam);
         }
     }
 }
