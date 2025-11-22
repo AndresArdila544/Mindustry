@@ -922,6 +922,11 @@ public class HudFragment{
                 builder.append("[lightgray]").append(Core.bundle.get("sector.curcapture"));
             }
 
+            //do not show status after game over
+            if(state.afterGameOver && state.isCampaign()){
+                return builder;
+            }
+
             if(!state.rules.waves){
                 return builder;
             }
