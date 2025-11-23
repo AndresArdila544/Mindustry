@@ -91,6 +91,8 @@ public class ShieldArcAbility extends Ability{
     /** State. */
     protected float widthScale, alpha;
 
+    public boolean pushUnits = true;
+
     @Override
     public void addStats(Table t){
         super.addStats(t);
@@ -177,6 +179,8 @@ public class ShieldArcAbility extends Ability{
     }
 
     private void stopUnit(Unit unit){
+        if(!pushUnits) return;
+
         float reach = radius + width;
         float overlapDst = reach - unit.dst(paramPos.x, paramPos.y);
 

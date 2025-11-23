@@ -522,6 +522,9 @@ class WeatherEngine{
 /** Handles updating per-team AIs and prebuild unit spawning. */
 class TeamAIManager{
     public void updateAll(){
+        // ensure infinite resources are disabled
+        state.rules.infiniteResources = false;
+
         for(TeamData data : state.teams.getActive()){
             var rules = data.team.rules();
             if(rules.fillItems && data.cores.size > 0){
