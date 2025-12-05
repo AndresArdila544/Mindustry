@@ -1,0 +1,12 @@
+﻿java : Exception in thread "main" java.lang.NullPointerException: Cannot invoke "java.io.DataInputStream.close()" 
+because "this.file" is null
+At C:\Users\andre\OneDrive\Documentos\CONCORDIA\4 SEMESTER\SOEN 6491\Deliverable 
+4\Mindustry\metrics_analysis\run_ckjm_for_commits.ps1:93 char:15
++     $Output = java -jar $CKJM_JAR $ClassPathRoot 2>&1
++               ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : NotSpecified: (Exception in th...s.file" is null:String) [], RemoteException
+    + FullyQualifiedErrorId : NativeCommandError
+ 
+	at org.apache.bcel.classfile.ClassParser.parse(ClassParser.java:165)
+	at gr.spinellis.ckjm.MetricsFilter.processClass(Unknown Source)
+	at gr.spinellis.ckjm.MetricsFilter.main(Unknown Source)

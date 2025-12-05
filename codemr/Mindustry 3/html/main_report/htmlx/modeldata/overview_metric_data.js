@@ -1,0 +1,1 @@
+var CodeMR_ProjectMetrics = {"Project Name":"Mindustry", "Number of Highly Problematic Classes":28, "Number of Entities":1341, "Number of Problematic Classes":165, "Class Lines of Code":93949, "Number of External Packages":64, "Number of Packages":61, "Number of External Entities":591};var EQ_COLOR_OF_LEVELS = ["#1F77B4","#007F24","#62BF18","#FFC800","#FF5B13","#E50000"];
